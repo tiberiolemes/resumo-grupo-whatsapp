@@ -236,13 +236,28 @@ por JID acontece depois, dentro do n8n. Por isso:
   passo 3 da Instalação). Sem isso, qualquer pessoa que descobrir a URL
   pode mandar payloads falsos pro seu webhook.
 
+## Confiabilidade
+
+Dois ajustes garantem que o resumo diário sempre seja postado, mesmo em
+dias sem atividade ou com falha externa:
+- O node "Ler mensagens de hoje" vem com `alwaysOutputData: true`. Sem
+  isso, quando não há nenhuma mensagem no dia, o n8n interrompe a execução
+  ali mesmo e a mensagem de "sem atividade" nunca é postada.
+- O node "Anthropic - resumir tópicos" vem com
+  `onError: "continueRegularOutput"`. Se a chamada de IA falhar (chave sem
+  crédito, API fora do ar, etc.), a execução segue e o node "Formatar - com
+  atividade" usa o texto de fallback ("Não foi possível gerar o resumo
+  hoje.") em vez de derrubar a execução inteira — você ainda recebe os
+  links e o Top 5, calculados sem depender da IA.
+
 ## Limitações conhecidas desta v1
 
 - Não captura mídia (áudio, imagem, vídeo) — só texto.
 - Um grupo por instalação (sem suporte multi-grupo nesta versão).
-- Sem alerta automático se a chamada de IA falhar — teste o comportamento
-  do dia "sem atividade" antes de confiar no sistema (ver seção de teste
-  acima).
+- Se a chamada de IA falhar, o resumo de tópicos vira um texto de fallback
+  (ver seção "Confiabilidade" acima) — não há alerta automático avisando
+  que isso aconteceu, então vale conferir de vez em quando se o resumo
+  ainda está vindo com o parágrafo de tópicos normal.
 
 ## Licença
 

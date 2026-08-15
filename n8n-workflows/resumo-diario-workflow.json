@@ -35,7 +35,8 @@
             { "keyName": "timestamp", "condition": "lt", "keyValue": "={{$now.plus({days:1}).startOf('day').toISO()}}" }
           ]
         }
-      }
+      },
+      "alwaysOutputData": true
     },
     {
       "id": "code_stats",
@@ -78,6 +79,7 @@
       "retryOnFail": true,
       "maxTries": 2,
       "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput",
       "parameters": {
         "method": "POST",
         "url": "https://api.anthropic.com/v1/messages",
