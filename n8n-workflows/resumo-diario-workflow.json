@@ -1,0 +1,158 @@
+{
+  "name": "ResumoGrupo · Resumo Diário",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "schedule1",
+      "name": "Todo dia às 22h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [0, 0],
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "cronExpression", "expression": "0 22 * * 1-5" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "datatable_get",
+      "name": "Ler mensagens de hoje",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [220, 0],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": { "mode": "id", "value": "COLOQUE_O_ID_DA_SUA_DATA_TABLE_AQUI" },
+        "returnAll": true,
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            { "keyName": "timestamp", "condition": "gte", "keyValue": "={{$now.startOf('day').toISO()}}" },
+            { "keyName": "timestamp", "condition": "lt", "keyValue": "={{$now.plus({days:1}).startOf('day').toISO()}}" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "code_stats",
+      "name": "Calcular estatísticas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 0],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\n\nif (items.length === 0) {\n  return [{ json: { temAtividade: false } }];\n}\n\nconst contagem = {};\nconst linksSet = new Set();\nconst textos = [];\n\nfor (const item of items) {\n  const row = item.json;\n  const nome = row.remetente_nome || 'Desconhecido';\n  contagem[nome] = (contagem[nome] || 0) + 1;\n\n  if (row.links) {\n    row.links.split(',').map(l => l.trim()).filter(Boolean).forEach(l => linksSet.add(l));\n  }\n\n  if (row.texto) {\n    textos.push(`${nome}: ${row.texto}`);\n  }\n}\n\nconst top5 = Object.entries(contagem)\n  .sort((a, b) => b[1] - a[1])\n  .slice(0, 5)\n  .map(([nome, qtd], i) => `${i + 1}. ${nome} — ${qtd} msgs`)\n  .join('\\n');\n\nreturn [{\n  json: {\n    temAtividade: true,\n    top5,\n    links: Array.from(linksSet).join('\\n') || 'nenhum link hoje',\n    textoConcatenado: textos.join('\\n'),\n  },\n}];"
+      }
+    },
+    {
+      "id": "if_atividade",
+      "name": "Teve atividade?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [660, 0],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "typeValidation": "strict" },
+          "conditions": [
+            {
+              "leftValue": "={{$json.temAtividade}}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "http_anthropic",
+      "name": "Anthropic - resumir tópicos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [880, -80],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "anthropicApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "anthropic-version", "value": "2023-06-01" }]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"claude-haiku-4-5-20251001\", max_tokens: 400, messages: [{ role: \"user\", content: \"Você vai receber mensagens trocadas hoje no grupo de WhatsApp 'SEU GRUPO AQUI' (edite este prompt pra descrever o contexto do seu grupo), no formato 'Nome: mensagem' por linha. Escreva um resumo narrativo e coerente dos principais tópicos discutidos, em português, em um único parágrafo curto (3 a 5 frases), sem listar mensagem por mensagem. Ignore saudações, figurinhas e conversa fiada; foque no que teve substância. Se não houver assunto relevante, diga isso brevemente.\\n\\nMensagens de hoje:\\n\" + $json.textoConcatenado }] }) }}"
+      },
+      "credentials": {}
+    },
+    {
+      "id": "code_formatar_com",
+      "name": "Formatar - com atividade",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, -80],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const resp = $input.first().json;\nconst resumoTopicos = resp.content?.[0]?.text?.trim() || 'Não foi possível gerar o resumo hoje.';\nconst stats = $('Calcular estatísticas').first().json;\n\nconst mensagemFinal = `📋 Resumo do dia — SEU GRUPO AQUI\\n\\n🗣️ Tópicos discutidos\\n${resumoTopicos}\\n\\n🔗 Links compartilhados\\n${stats.links}\\n\\n🏆 Top 5 participantes\\n${stats.top5}`;\n\nreturn [{ json: { mensagemFinal } }];"
+      }
+    },
+    {
+      "id": "code_formatar_sem",
+      "name": "Formatar - sem atividade",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 80],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { mensagemFinal: '📋 Resumo do dia — SEU GRUPO AQUI\\n\\nSem atividade hoje. 🌙' } }];"
+      }
+    },
+    {
+      "id": "http_enviar",
+      "name": "Enviar mensagem WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [1320, 0],
+      "parameters": {
+        "method": "POST",
+        "url": "COLOQUE_A_URL_DE_ENVIO_DO_SEU_PROVEDOR_AQUI",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: \"COLOQUE_O_JID_DO_SEU_GRUPO_AQUI@g.us\", text: $json.mensagemFinal }) }}"
+      },
+      "credentials": {},
+      "disabled": false
+    }
+  ],
+  "connections": {
+    "Todo dia às 22h": { "main": [[{ "node": "Ler mensagens de hoje", "type": "main", "index": 0 }]] },
+    "Ler mensagens de hoje": { "main": [[{ "node": "Calcular estatísticas", "type": "main", "index": 0 }]] },
+    "Calcular estatísticas": { "main": [[{ "node": "Teve atividade?", "type": "main", "index": 0 }]] },
+    "Teve atividade?": {
+      "main": [
+        [{ "node": "Anthropic - resumir tópicos", "type": "main", "index": 0 }],
+        [{ "node": "Formatar - sem atividade", "type": "main", "index": 0 }]
+      ]
+    },
+    "Anthropic - resumir tópicos": { "main": [[{ "node": "Formatar - com atividade", "type": "main", "index": 0 }]] },
+    "Formatar - com atividade": { "main": [[{ "node": "Enviar mensagem WhatsApp", "type": "main", "index": 0 }]] },
+    "Formatar - sem atividade": { "main": [[{ "node": "Enviar mensagem WhatsApp", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "timezone": "America/Sao_Paulo"
+  }
+}

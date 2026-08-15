@@ -1,0 +1,83 @@
+{
+  "name": "ResumoGrupo · Captura",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "webhook1",
+      "name": "Webhook Evolution API",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "resumo-grupo-captura",
+        "responseMode": "onReceived",
+        "responseData": "noData",
+        "authentication": "headerAuth"
+      },
+      "credentials": {}
+    },
+    {
+      "id": "code1",
+      "name": "Filtrar e extrair",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "// ====================================================================\n// EDITE AQUI: troque pelo JID do SEU grupo de WhatsApp.\n// Descubra o JID via GET /group/fetchAllGroups na sua instância\n// Evolution API/WAHA, ou peça pro bot te mandar o remoteJid da primeira\n// mensagem recebida antes de configurar o filtro.\n// ====================================================================\nconst GROUP_JID = 'COLOQUE_O_JID_DO_SEU_GRUPO_AQUI@g.us';\n\nconst item = $input.first().json;\nconst data = item.body?.data || item.data || item;\n\nconst remoteJid = data.key?.remoteJid;\nconst fromMe = data.key?.fromMe;\n\nif (remoteJid !== GROUP_JID) {\n  return [];\n}\n\nconst texto = data.message?.conversation\n  || data.message?.extendedTextMessage?.text\n  || '';\n\nif (!texto) {\n  return [];\n}\n\n// Ajuste este filtro se você quiser capturar suas próprias mensagens no\n// grupo (ver README, seção \"Filtro de mensagens próprias\") — por padrão,\n// mensagens enviadas pelo próprio número conectado são ignoradas.\nif (fromMe === true) {\n  return [];\n}\n\nconst urlRegex = /(https?:\\/\\/[^\\s]+)/g;\nconst links = (texto.match(urlRegex) || []).join(', ');\n\nconst remetenteJid = data.key?.participant || data.key?.remoteJid || '';\nconst remetenteNome = data.pushName || remetenteJid;\n\nconst rawTs = data.messageTimestamp;\nconst ts = typeof rawTs === 'string' ? parseInt(rawTs, 10) : rawTs;\nconst timestampIso = new Date(ts * 1000).toISOString();\n\nreturn [{\n  json: {\n    remetente_nome: remetenteNome,\n    remetente_jid: remetenteJid,\n    texto,\n    links,\n    timestamp: timestampIso,\n  },\n}];"
+      }
+    },
+    {
+      "id": "datatable1",
+      "name": "Gravar mensagem",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [440, 0],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "mode": "id",
+          "value": "COLOQUE_O_ID_DA_SUA_DATA_TABLE_AQUI"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "remetente_nome": "={{$json.remetente_nome}}",
+            "remetente_jid": "={{$json.remetente_jid}}",
+            "texto": "={{$json.texto}}",
+            "links": "={{$json.links}}",
+            "timestamp": "={{$json.timestamp}}"
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Evolution API": {
+      "main": [
+        [
+          { "node": "Filtrar e extrair", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Filtrar e extrair": {
+      "main": [
+        [
+          { "node": "Gravar mensagem", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": false
+  },
+  "tags": []
+}
