@@ -1,0 +1,270 @@
+{
+  "active": false,
+  "connections": {
+    "Anthropic - resumir semana": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Formatar - semana com atividade",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Calcular estatísticas da semana": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Teve atividade na semana?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Domingo às 9h": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Ler mensagens da semana",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Formatar - semana com atividade": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Enviar mensagem WhatsApp (semanal)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Formatar - semana sem atividade": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Enviar mensagem WhatsApp (semanal)",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Ler mensagens da semana": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Calcular estatísticas da semana",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Teve atividade na semana?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Anthropic - resumir semana",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Formatar - semana sem atividade",
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "name": "ResumoGrupo · Resumo Semanal",
+  "nodes": [
+    {
+      "id": "3c0793c2-d1ee-45be-8b5f-5371b930ebd7",
+      "name": "Domingo às 9h",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "expression": "0 9 * * 0",
+              "field": "cronExpression"
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        0
+      ],
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3
+    },
+    {
+      "alwaysOutputData": true,
+      "id": "e8103ebf-a05f-44b8-8915-0a4a5fa5cf01",
+      "name": "Ler mensagens da semana",
+      "parameters": {
+        "dataTableId": {
+          "mode": "id",
+          "value": "COLOQUE_O_ID_DA_SUA_DATA_TABLE_AQUI"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "condition": "gte",
+              "keyName": "timestamp",
+              "keyValue": "={{$now.startOf('week').toISO()}}"
+            },
+            {
+              "condition": "lt",
+              "keyName": "timestamp",
+              "keyValue": "={{$now.plus({days:1}).startOf('day').toISO()}}"
+            }
+          ]
+        },
+        "matchType": "allConditions",
+        "operation": "get",
+        "resource": "row",
+        "returnAll": true
+      },
+      "position": [
+        220,
+        0
+      ],
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1
+    },
+    {
+      "id": "2892a5a2-3926-4772-99d0-4fff15c4243e",
+      "name": "Calcular estatísticas da semana",
+      "parameters": {
+        "jsCode": "const linhas = $input.all()\n  .map(item => item.json)\n  .filter(row => row && (row.remetente_nome || row.texto || row.links || row.timestamp));\n\nif (linhas.length === 0) {\n  return [{ json: { temAtividade: false } }];\n}\n\nconst contagem = {};\nconst linksSet = new Set();\nconst textos = [];\n\nfor (const row of linhas) {\n  const nome = row.remetente_nome || 'Desconhecido';\n  contagem[nome] = (contagem[nome] || 0) + 1;\n\n  if (row.links) {\n    row.links.split(',').map(l => l.trim()).filter(Boolean).forEach(l => linksSet.add(l));\n  }\n\n  if (row.texto) {\n    textos.push(`${nome}: ${row.texto}`);\n  }\n}\n\nconst top5 = Object.entries(contagem)\n  .sort((a, b) => b[1] - a[1])\n  .slice(0, 5)\n  .map(([nome, qtd], i) => `${i + 1}. ${nome} (${qtd} ${qtd === 1 ? 'msg' : 'msgs'})`)\n  .join('\\n');\n\nreturn [{\n  json: {\n    temAtividade: true,\n    top5,\n    links: Array.from(linksSet).join('\\n') || 'nenhum link na semana',\n    textoConcatenado: textos.join('\\n'),\n  },\n}];\n"
+      },
+      "position": [
+        440,
+        0
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "f3182e5b-bc49-4184-8786-374d9c3d22df",
+      "name": "Teve atividade na semana?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{$json.temAtividade}}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          }
+        }
+      },
+      "position": [
+        660,
+        0
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "1c26963e-8a9b-4278-8149-00d46531b9a3",
+      "name": "Anthropic - resumir semana",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "contentType": "json",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "jsonBody": "={{ JSON.stringify({ model: \"claude-haiku-4-5-20251001\", max_tokens: 800, messages: [{ role: \"user\", content: \"Você vai receber mensagens trocadas ao longo da última semana (segunda a domingo) no grupo de WhatsApp 'SEU GRUPO AQUI' (edite este prompt pra descrever o contexto do seu grupo), no formato 'Nome: mensagem' por linha, um dia após o outro. Escreva um resumo dos principais temas discutidos na semana, em português, com um parágrafo por assunto (2 a 5 parágrafos no total, de 1 a 3 frases cada), separados por uma linha em branco, agrupando por assunto em vez de por dia. Cada parágrafo trata de um assunto só e começa direto pelo assunto, sem título, numeração ou marcador. Ignore saudações, figurinhas e conversa fiada; foque no que teve substância. Se não houver assunto relevante, diga isso brevemente.\\n\\nMensagens da semana:\\n\" + $json.textoConcatenado }] }) }}",
+        "method": "POST",
+        "nodeCredentialType": "anthropicApi",
+        "sendBody": true,
+        "sendHeaders": true,
+        "specifyBody": "json",
+        "url": "https://api.anthropic.com/v1/messages"
+      },
+      "position": [
+        880,
+        -80
+      ],
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4
+    },
+    {
+      "id": "62edcbac-0bd2-4a4d-8f49-a58d5627d14c",
+      "name": "Formatar - semana com atividade",
+      "parameters": {
+        "jsCode": "const DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];\nconst MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',\n  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];\nconst LINHA = '┈┈┈┈┈┈┈┈┈┈┈┈┈┈';\n\nconst emParagrafos = (texto) => texto\n  .split(/\\n+/)\n  .map(paragrafo => paragrafo.trim())\n  .filter(Boolean)\n  .join('\\n\\n');\n\nconst inicio = $now.startOf('week');\nconst fim = $now;\nconst periodo = inicio.month === fim.month\n  ? `${inicio.day} a ${fim.day} de ${MESES[fim.month - 1]}`\n  : `${inicio.day} de ${MESES[inicio.month - 1]} a ${fim.day} de ${MESES[fim.month - 1]}`;\n\nconst resp = $input.first().json;\nconst resumoTopicos = emParagrafos(resp.content?.[0]?.text?.trim() || 'Não foi possível gerar o resumo da semana.');\nconst stats = $('Calcular estatísticas da semana').first().json;\n\nconst mensagemFinal = [\n  '*📅 Resumo da semana*',\n  `_SEU GRUPO AQUI · ${periodo}_`,\n  '',\n  LINHA,\n  '',\n  '*🗣️ Principais tópicos*',\n  '',\n  resumoTopicos,\n  '',\n  LINHA,\n  '',\n  '*🔗 Links compartilhados*',\n  '',\n  stats.links,\n  '',\n  LINHA,\n  '',\n  '*🏆 Top 5 da semana*',\n  '',\n  stats.top5,\n].join('\\n');\n\nreturn [{ json: { mensagemFinal } }];"
+      },
+      "position": [
+        1100,
+        -80
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "047a5246-f0bb-4db8-bf4e-bc85a2aad5a6",
+      "name": "Formatar - semana sem atividade",
+      "parameters": {
+        "jsCode": "const DIAS = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];\nconst MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',\n  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];\nconst LINHA = '┈┈┈┈┈┈┈┈┈┈┈┈┈┈';\n\nconst inicio = $now.startOf('week');\nconst fim = $now;\nconst periodo = inicio.month === fim.month\n  ? `${inicio.day} a ${fim.day} de ${MESES[fim.month - 1]}`\n  : `${inicio.day} de ${MESES[inicio.month - 1]} a ${fim.day} de ${MESES[fim.month - 1]}`;\n\nconst mensagemFinal = [\n  '*📅 Resumo da semana*',\n  `_SEU GRUPO AQUI · ${periodo}_`,\n  '',\n  LINHA,\n  '',\n  'Sem atividade nessa semana. 🌙',\n].join('\\n');\n\nreturn [{ json: { mensagemFinal } }];"
+      },
+      "position": [
+        880,
+        80
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "disabled": false,
+      "id": "5c500750-5826-48ec-a756-e5ff004e49c4",
+      "name": "Enviar mensagem WhatsApp (semanal)",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "contentType": "json",
+        "jsonBody": "={{ JSON.stringify({ number: \"COLOQUE_O_JID_DO_SEU_GRUPO_AQUI@g.us\", text: $json.mensagemFinal }) }}",
+        "method": "POST",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "COLOQUE_A_URL_DE_ENVIO_DO_SEU_PROVEDOR_AQUI"
+      },
+      "position": [
+        1320,
+        0
+      ],
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4
+    }
+  ],
+  "settings": {
+    "timezone": "America/Sao_Paulo"
+  }
+}
