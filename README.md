@@ -1,5 +1,27 @@
 # resumoGrupo — resumo diário e semanal de grupo de WhatsApp via IA
 
+<p align="center">
+  <img src="assets/resumo-grupo-banner.svg" alt="resumoGrupo — resumos inteligentes para grupos de WhatsApp" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/tiberiolemes/resumo-grupo-whatsapp"><img src="https://img.shields.io/badge/status-v1-16a34a?style=for-the-badge" alt="Status v1"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-22c55e?style=for-the-badge" alt="Licença MIT"></a>
+  <a href="https://n8n.io"><img src="https://img.shields.io/badge/n8n-2.7.0%2B-ea4b71?style=for-the-badge" alt="n8n 2.7.0 ou superior"></a>
+  <a href="https://waha.devlike.pro/"><img src="https://img.shields.io/badge/WhatsApp-Evolution%20API%20%7C%20WAHA-25d366?style=for-the-badge" alt="WhatsApp via Evolution API ou WAHA"></a>
+  <a href="https://www.anthropic.com/"><img src="https://img.shields.io/badge/IA-Anthropic%20%7C%20OpenAI-7c3aed?style=for-the-badge" alt="Anthropic ou OpenAI"></a>
+</p>
+
+<p align="center">
+  <a href="#pt-br">🇧🇷 PT-BR</a> ·
+  <a href="#english">🇺🇸 English</a> ·
+  <a href="n8n-workflows/">⚙️ Workflows n8n</a> ·
+  <a href="#instalação">🚀 Instalação</a> ·
+  <a href="#segurança">🛡️ Segurança</a>
+</p>
+
+## PT-BR
+
 Bot que lê as mensagens do seu grupo de WhatsApp ao longo do dia e posta,
 num horário definido, um resumo automático com os principais tópicos
 discutidos (gerado por IA, um parágrafo por assunto), os links
@@ -322,3 +344,113 @@ renderizam no WhatsApp. Só então aponte para o grupo.
 ## Licença
 
 MIT — veja `LICENSE`.
+
+## English
+
+resumoGrupo reads WhatsApp group messages during the day and posts a scheduled AI-generated summary with the main topics discussed, shared links, and the most active participants. It also includes an optional weekly summary.
+
+Built with [n8n](https://n8n.io), an unofficial WhatsApp API provider (Evolution API by default, adaptable to WAHA and others), and Anthropic or OpenAI for topic summarization.
+
+### Prerequisites
+
+- An n8n instance (version 2.7.0 or newer; the native Data Table used to store messages was introduced in that version).
+- An unofficial WhatsApp API provider already connected to the number that will be in the group. Evolution API is the provider tested natively; see the WAHA section for an alternative.
+- An Anthropic or OpenAI API key.
+- Admin access to the target WhatsApp group if only admins are allowed to send messages.
+
+### Installation
+
+1. **Create the Data Table.** In n8n, go to Data Tables → New Table and create `resumo_grupo_mensagens` with these columns: `remetente_nome`, `remetente_jid`, `texto`, `links`, and `timestamp`. Record the table ID.
+2. **Import the workflows.** Import `n8n-workflows/captura-workflow.json`, `n8n-workflows/resumo-diario-workflow.json`, and, optionally, `n8n-workflows/resumo-semanal-workflow.json`.
+3. **Configure Capture.** Replace the group JID placeholder, set the Data Table ID, replace the webhook path with a long random value, enable the workflow, and register its production webhook URL with your WhatsApp provider. The webhook path is the authentication boundary: treat it like a password. Do not add Header Auth to this webhook when using self-hosted Evolution API, because that deployment does not send custom webhook headers.
+4. **Configure credentials.** Add your Anthropic or OpenAI credential and the HTTP Header Auth credential required by your WhatsApp provider.
+5. **Configure Daily Summary.** Set the same Data Table ID, connect the AI credential, replace the group name and provider URL/JID placeholders, and choose the desired schedule.
+6. **Test before enabling real delivery.** Send a test message, confirm it appears in the Data Table, run the daily workflow manually with the sending node disabled, review the generated text, and only then enable delivery.
+
+### Finding the group JID
+
+Each provider has its own method. With Evolution API:
+
+~~~bash
+curl -X GET "https://YOUR_INSTANCE/group/fetchAllGroups/YOUR_INSTANCE?getParticipants=false" \
+  -H "apikey: YOUR_API_KEY"
+~~~
+
+The `id` field returned for a group is its JID, usually in the `NUMBER-TIMESTAMP@g.us` format.
+
+### Adapting to another WhatsApp provider (WAHA)
+
+[WAHA](https://waha.devlike.pro/) is an open-source alternative to Evolution API. Its incoming payload and send endpoint use different field names. Update the `Filtrar e extrair` Code node to read the group from `payload.from`, ignore `payload.fromMe === true`, use `payload.participant` as the author JID, and convert `payload.timestamp` from Unix seconds. Confirm the actual payload in your own environment before relying on undocumented display-name fields.
+
+For text delivery, WAHA uses:
+
+~~~text
+POST YOUR_WAHA_BASE_URL/api/sendText
+Header: X-Api-Key: YOUR_KEY
+~~~
+
+Use a body with `session`, `chatId`, and `text` instead of Evolution API's `number` field. The full payload mapping and JavaScript example remain available in the PT-BR section above.
+
+Sources consulted in August 2026: [WAHA receive messages](https://waha.devlike.pro/docs/how-to/receive-messages/), [WAHA send messages](https://waha.devlike.pro/docs/how-to/send-messages/), [WAHA events](https://waha.devlike.pro/docs/how-to/events/), and the [WAHA documentation repository](https://github.com/devlikeapro/waha-docs/blob/main/content/docs/how-to/events/index.md).
+
+### Adapting to another AI provider (OpenAI)
+
+The default AI node calls Anthropic's messages API. To use OpenAI:
+
+1. Change the HTTP URL to `https://api.openai.com/v1/chat/completions`.
+2. Use the `openAiApi` credential type, or HTTP Header Auth with `Authorization: Bearer YOUR_KEY`.
+3. Send the OpenAI chat-completions body, for example:
+
+~~~javascript
+={{ JSON.stringify({
+  model: "gpt-4o-mini",
+  messages: [{ role: "user", content: "YOUR PROMPT + " + $json.textoConcatenado }]
+}) }}
+~~~
+
+4. In the formatting node, read `resp.choices?.[0]?.message?.content` instead of Anthropic's `resp.content?.[0]?.text`.
+
+### Messages sent by the connected number
+
+Capture stores messages sent by the connected number and discards only summaries posted by the bot, identified by their `📋 Resumo do dia` or `📅 Resumo da semana` header. This prevents yesterday's summary from becoming today's topic.
+
+This supports both a dedicated bot number and a personal number used by someone who participates in the group. The own-number display name is controlled by the `NOME_PROPRIO` constant because `pushName` is not reliable for `fromMe` events.
+
+If you change the summary header, update the `PREFIXOS_DO_BOT` constant in `Filtrar e extrair` as well. The comparison removes asterisks before matching, and the discard rule only applies when `fromMe === true`.
+
+### Security
+
+The Evolution API webhook receives events from the entire connected WhatsApp instance, not only the configured group; the JID filter runs inside n8n. The Capture workflow therefore disables successful-execution data and execution progress persistence so private conversations are not stored in n8n execution history. Do not re-enable those options without understanding the privacy impact.
+
+The webhook is protected by a long random path rather than a custom header because self-hosted Evolution API does not send custom webhook headers. Disabling execution history also means the whole capture execution disappears from the n8n execution list; use the Data Table rows to confirm that capture is alive.
+
+### Reliability
+
+The daily summary is designed to keep working on inactive days and during external failures:
+
+- `alwaysOutputData: true` lets the workflow reach the no-activity message when the Data Table is empty.
+- The statistics node discards the empty item produced by that setting, preventing a phantom participant from appearing.
+- Missing or malformed `messageTimestamp` values no longer abort message capture.
+- If the AI call fails, the workflow continues with fallback text while still delivering links and Top 5 statistics calculated without the AI response.
+
+These settings are coupled and should not be separated.
+
+### Weekly summary
+
+`n8n-workflows/resumo-semanal-workflow.json` runs once a week (Sunday at 9:00 by default), summarizes Monday through Sunday, and groups the result by topic instead of by day. It uses the same Data Table. Do not import it if you do not want weekly delivery.
+
+### Testing before releasing to the group
+
+The Code nodes are plain JavaScript and can be tested outside n8n with a mocked `$input`; formatting nodes that use `$now` can be tested with a Luxon `DateTime`. Before the first real run, send the summary to a private number, verify WhatsApp formatting, and only then change the destination back to the group.
+
+### Known limitations in v1
+
+- Text only; audio, images, and video are not captured.
+- One group per installation.
+- If the AI call fails, the topic summary uses fallback text and there is no automatic alert. Periodically confirm that normal topic paragraphs are still being generated.
+
+### License
+
+MIT — see `LICENSE`.
+
+[Back to PT-BR](#pt-br) · [Workflows](n8n-workflows/)
