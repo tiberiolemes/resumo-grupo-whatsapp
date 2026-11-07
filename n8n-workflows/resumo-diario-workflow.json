@@ -81,6 +81,11 @@
             "index": 0,
             "node": "Ler mensagens de hoje",
             "type": "main"
+          },
+          {
+            "index": 0,
+            "node": "Apagar mensagens com mais de 60 dias",
+            "type": "main"
           }
         ]
       ]
@@ -271,6 +276,37 @@
       ],
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4
+    },
+    {
+      "id": "datatable_apagar_60d",
+      "name": "Apagar mensagens com mais de 60 dias",
+      "notes": "Apaga do resumo as mensagens com mais de 60 dias. O resumo diário e o semanal só leem o dia e a semana.",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "dataTableId": {
+          "mode": "id",
+          "value": "COLOQUE_O_ID_DA_SUA_DATA_TABLE_AQUI"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "condition": "lt",
+              "keyName": "timestamp",
+              "keyValue": "={{$now.minus({days:60}).startOf('day').toISO()}}"
+            }
+          ]
+        },
+        "matchType": "allConditions",
+        "operation": "deleteRows",
+        "options": {},
+        "resource": "row"
+      },
+      "position": [
+        220,
+        220
+      ],
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1
     }
   ],
   "settings": {

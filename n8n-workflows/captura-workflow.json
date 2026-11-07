@@ -1,12 +1,61 @@
 {
   "active": false,
   "connections": {
+    "Buscar áudio na Evolution API": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Preparar binário do áudio",
+            "type": "main"
+          }
+        ]
+      ]
+    },
     "Filtrar e extrair": {
       "main": [
         [
           {
             "index": 0,
+            "node": "É áudio?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Montar texto do áudio": {
+      "main": [
+        [
+          {
+            "index": 0,
             "node": "Gravar mensagem",
+            "type": "main"
+          },
+          {
+            "index": 0,
+            "node": "Áudio recente?",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Preparar binário do áudio": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Transcrever na Groq",
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "Transcrever na Groq": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Montar texto do áudio",
             "type": "main"
           }
         ]
@@ -22,6 +71,36 @@
           }
         ]
       ]
+    },
+    "Áudio recente?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Responder transcrição no grupo",
+            "type": "main"
+          }
+        ],
+        []
+      ]
+    },
+    "É áudio?": {
+      "main": [
+        [
+          {
+            "index": 0,
+            "node": "Buscar áudio na Evolution API",
+            "type": "main"
+          }
+        ],
+        [
+          {
+            "index": 0,
+            "node": "Gravar mensagem",
+            "type": "main"
+          }
+        ]
+      ]
     }
   },
   "name": "ResumoGrupo · Captura",
@@ -30,7 +109,7 @@
       "id": "code1",
       "name": "Filtrar e extrair",
       "parameters": {
-        "jsCode": "const item = $input.first().json;\nconst data = item.body?.data || item.data || item;\n\nconst GROUP_JID = 'COLOQUE_O_JID_DO_SEU_GRUPO_AQUI@g.us';\n\n// A instância é o número do próprio SEU NOME AQUI, que participa do grupo. As\n// mensagens dele contam para os tópicos e para o Top, como as de qualquer um.\nconst NOME_PROPRIO = 'SEU NOME AQUI';\n\n// O que o bot publica sai pelo mesmo número. Sem descartar, o resumo de ontem\n// vira assunto do resumo de hoje.\nconst PREFIXOS_DO_BOT = ['📋 Resumo do dia', '📅 Resumo da semana'];\n\nconst remoteJid = data.key?.remoteJid;\nconst fromMe = data.key?.fromMe;\n\nif (remoteJid !== GROUP_JID) {\n  return [];\n}\n\nconst texto = data.message?.conversation\n  || data.message?.extendedTextMessage?.text\n  || '';\n\nif (!texto) {\n  return [];\n}\n\n// Compara sem os asteriscos de negrito, que mudam com o formato da mensagem.\nconst semMarcacao = texto.replace(/\\*/g, '').trimStart();\nif (fromMe === true && PREFIXOS_DO_BOT.some(prefixo => semMarcacao.startsWith(prefixo))) {\n  return [];\n}\n\nconst urlRegex = /(https?:\\/\\/[^\\s]+)/g;\nconst links = (texto.match(urlRegex) || []).join(', ');\n\nconst remetenteJid = data.key?.participant || data.key?.remoteJid || '';\n// Sempre o mesmo nome para as próprias mensagens: pushName não vem de forma\n// confiável em fromMe, e dois nomes diferentes rachariam a contagem do Top.\nconst remetenteNome = fromMe === true ? NOME_PROPRIO : (data.pushName || remetenteJid);\n\nconst rawTs = data.messageTimestamp;\nconst ts = typeof rawTs === 'string' ? parseInt(rawTs, 10) : rawTs;\nconst data_ = Number.isFinite(ts) ? new Date(ts * 1000) : new Date();\nconst timestampIso = Number.isNaN(data_.getTime())\n  ? new Date().toISOString()\n  : data_.toISOString();\n\nreturn [{\n  json: {\n    remetente_nome: remetenteNome,\n    remetente_jid: remetenteJid,\n    texto,\n    links,\n    timestamp: timestampIso,\n  },\n}];"
+        "jsCode": "const item = $input.first().json;\nconst data = item.body?.data || item.data || item;\n\nconst GROUP_JID = 'COLOQUE_O_JID_DO_SEU_GRUPO_AQUI@g.us';\n\n// A instância é o número do próprio SEU NOME AQUI, que participa do grupo. As\n// mensagens dele contam para os tópicos e para o Top, como as de qualquer um.\nconst NOME_PROPRIO = 'SEU NOME AQUI';\n\n// O que o bot publica sai pelo mesmo número. Sem descartar, o resumo de ontem\n// vira assunto do resumo de hoje. O bot nunca manda áudio, só esse texto.\nconst PREFIXOS_DO_BOT = ['📋 Resumo do dia', '📅 Resumo da semana'];\n\nconst remoteJid = data.key?.remoteJid;\nconst fromMe = data.key?.fromMe;\n\nif (remoteJid !== GROUP_JID) {\n  return [];\n}\n\nconst remetenteJid = data.key?.participant || data.key?.remoteJid || '';\n// Sempre o mesmo nome para as próprias mensagens: pushName não vem de forma\n// confiável em fromMe, e dois nomes diferentes rachariam a contagem do Top.\nconst remetenteNome = fromMe === true ? NOME_PROPRIO : (data.pushName || remetenteJid);\n\nconst rawTs = data.messageTimestamp;\nconst ts = typeof rawTs === 'string' ? parseInt(rawTs, 10) : rawTs;\nconst data_ = Number.isFinite(ts) ? new Date(ts * 1000) : new Date();\nconst timestampIso = Number.isNaN(data_.getTime())\n  ? new Date().toISOString()\n  : data_.toISOString();\n\nconst texto = data.message?.conversation\n  || data.message?.extendedTextMessage?.text\n  || '';\n\nif (texto) {\n  // Compara sem os asteriscos de negrito, que mudam com o formato da mensagem.\n  const semMarcacao = texto.replace(/\\*/g, '').trimStart();\n  if (fromMe === true && PREFIXOS_DO_BOT.some(prefixo => semMarcacao.startsWith(prefixo))) {\n    return [];\n  }\n\n  const urlRegex = /(https?:\\/\\/[^\\s]+)/g;\n  const links = (texto.match(urlRegex) || []).join(', ');\n\n  return [{\n    json: {\n      tipo: 'texto',\n      remetente_nome: remetenteNome,\n      remetente_jid: remetenteJid,\n      texto,\n      links,\n      timestamp: timestampIso,\n    },\n  }];\n}\n\n// Sem texto: só segue adiante se for áudio, pro ramo de transcrição buscar a\n// mídia e preencher o texto depois. Qualquer outra mídia (imagem, figurinha,\n// vídeo, documento) continua fora de escopo e é descartada aqui.\nconst mensagemId = data.message?.audioMessage ? data.key?.id : null;\nif (!mensagemId) {\n  return [];\n}\n\n// A Evolution pode entregar mensagens com horas de atraso (nov/2026, dois dias\n// de acúmulo). Áudio atrasado entra no resumo, mas não ganha resposta no grupo.\nconst RESPONDER_ATE_MS = 15 * 60 * 1000;\nconst recente = Number.isFinite(ts) && Date.now() - ts * 1000 <= RESPONDER_ATE_MS;\n\nreturn [{\n  json: {\n    tipo: 'audio',\n    remetente_nome: remetenteNome,\n    remetente_jid: remetenteJid,\n    timestamp: timestampIso,\n    mensagem_id: mensagemId,\n    recente,\n  },\n}];"
       },
       "position": [
         224,
@@ -81,6 +160,183 @@
       ],
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1
+    },
+    {
+      "id": "if_audio",
+      "name": "É áudio?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond_tipo_audio",
+              "leftValue": "={{ $json.tipo }}",
+              "operator": {
+                "operation": "equals",
+                "type": "string"
+              },
+              "rightValue": "audio"
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        448,
+        160
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
+    },
+    {
+      "id": "http_buscar_audio",
+      "name": "Buscar áudio na Evolution API",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "contentType": "json",
+        "jsonBody": "={{ JSON.stringify({ message: { key: { id: $json.mensagem_id } }, convertToMp4: false }) }}",
+        "method": "POST",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "COLOQUE_A_URL_DE_BUSCA_DE_MIDIA_DO_SEU_PROVEDOR_AQUI"
+      },
+      "position": [
+        672,
+        40
+      ],
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4
+    },
+    {
+      "id": "code_preparar_binario",
+      "name": "Preparar binário do áudio",
+      "parameters": {
+        "jsCode": "const resposta = $input.first().json;\nconst base64 = resposta.base64;\nconst mimetype = resposta.mimetype || 'audio/ogg; codecs=opus';\n\n// Sem base64, a mídia não veio (mensagem expirada, id errado, etc.). Deixa\n// a execução falhar aqui — mesmo efeito de descartar a mensagem, sem poluir\n// o resumo com um texto de erro.\nif (!base64) {\n  const id = $('Filtrar e extrair').first().json.mensagem_id || '?';\n  throw new Error('Evolution API não devolveu base64 para a mensagem ' + id);\n}\n\nconst buffer = Buffer.from(base64, 'base64');\nconst extensao = mimetype.includes('ogg') ? 'ogg' : 'bin';\nconst binaryData = await this.helpers.prepareBinaryData(buffer, `audio.${extensao}`, mimetype);\n\nreturn [{\n  json: {},\n  binary: { data: binaryData },\n}];"
+      },
+      "position": [
+        896,
+        40
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "http_transcrever_groq",
+      "name": "Transcrever na Groq",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "inputDataFieldName": "data",
+              "name": "file",
+              "parameterType": "formBinaryData"
+            },
+            {
+              "name": "model",
+              "parameterType": "formData",
+              "value": "whisper-large-v3-turbo"
+            },
+            {
+              "name": "language",
+              "parameterType": "formData",
+              "value": "pt"
+            },
+            {
+              "name": "response_format",
+              "parameterType": "formData",
+              "value": "json"
+            }
+          ]
+        },
+        "contentType": "multipart-form-data",
+        "method": "POST",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {},
+        "sendBody": true,
+        "url": "https://api.groq.com/openai/v1/audio/transcriptions"
+      },
+      "position": [
+        1120,
+        40
+      ],
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4
+    },
+    {
+      "id": "code_montar_texto_audio",
+      "name": "Montar texto do áudio",
+      "parameters": {
+        "jsCode": "// remetente/timestamp vêm do node original: os nodes intermediários\n// (Evolution API, Groq) substituem $json pelas próprias respostas.\nconst original = $('Filtrar e extrair').first().json;\nconst resposta = $input.first().json;\nconst transcricao = (resposta.text || '').trim();\n\nif (!transcricao) {\n  throw new Error('Groq não devolveu texto para a mensagem ' + (original.mensagem_id || '?'));\n}\n\nreturn [{\n  json: {\n    tipo: 'texto',\n    remetente_nome: original.remetente_nome,\n    remetente_jid: original.remetente_jid,\n    texto: '[áudio transcrito] ' + transcricao,\n    links: '',\n    timestamp: original.timestamp,\n  },\n}];"
+      },
+      "position": [
+        1344,
+        40
+      ],
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2
+    },
+    {
+      "id": "http_responder_grupo",
+      "name": "Responder transcrição no grupo",
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "authentication": "predefinedCredentialType",
+        "contentType": "json",
+        "jsonBody": "={{ JSON.stringify({ number: 'COLOQUE_O_JID_DO_SEU_GRUPO_AQUI@g.us', text: '\"' + $('Transcrever na Groq').first().json.text.trim() + '\"' + '\\n\\n_Transcrito por resumoGrupo_', quoted: { key: { id: $('Filtrar e extrair').first().json.mensagem_id } } }) }}",
+        "method": "POST",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "url": "COLOQUE_A_URL_DE_ENVIO_DO_SEU_PROVEDOR_AQUI"
+      },
+      "position": [
+        1568,
+        220
+      ],
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4
+    },
+    {
+      "id": "if_audio_recente",
+      "name": "Áudio recente?",
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "cond_audio_recente",
+              "leftValue": "={{ $('Filtrar e extrair').first().json.recente }}",
+              "operator": {
+                "operation": "true",
+                "singleValue": true,
+                "type": "boolean"
+              },
+              "rightValue": ""
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1344,
+        220
+      ],
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2
     }
   ],
   "settings": {

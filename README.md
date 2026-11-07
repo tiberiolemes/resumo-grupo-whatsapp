@@ -28,6 +28,9 @@ discutidos (gerado por IA, um parágrafo por assunto), os links
 compartilhados e os participantes mais ativos. Inclui também um resumo
 semanal opcional.
 
+Áudios do grupo são transcritos e entram no resumo como texto. A transcrição
+também é respondida no próprio grupo, citando o áudio, para quem prefere ler.
+
 Feito com [n8n](https://n8n.io) + um provedor de API WhatsApp não-oficial
 (Evolution API por padrão, adaptável pra WAHA ou outros) + Anthropic ou
 OpenAI pro resumo de tópicos.
@@ -40,6 +43,9 @@ OpenAI pro resumo de tópicos.
   ficar no grupo (Evolution API é o testado nativamente; veja a seção
   "Adaptar pra outro provedor" se usar WAHA ou outro).
 - Uma chave de API da Anthropic ou da OpenAI.
+- Opcional: uma chave de API da [Groq](https://console.groq.com) para
+  transcrever os áudios (o plano gratuito atende um grupo comum). Sem ela, o
+  texto continua funcionando e só os áudios ficam de fora.
 - Ser **admin do grupo** de WhatsApp de destino, se o grupo tiver a opção
   "só admins podem enviar mensagens" ativada.
 
@@ -75,6 +81,12 @@ OpenAI pro resumo de tópicos.
      schema e aceita ser gravado, mas o recurso é da versão Cloud). Se você
      exigir um header que nunca chega, o n8n passa a responder 401 e a
      captura para em silêncio, sem erro visível em lugar nenhum.
+   - Nos nodes de áudio: em "Buscar áudio na Evolution API", troque
+     `COLOQUE_A_URL_DE_BUSCA_DE_MIDIA_DO_SEU_PROVEDOR_AQUI` por
+     `https://SEU_SERVIDOR/chat/getBase64FromMediaMessage/SUA_INSTANCIA`; em
+     "Responder transcrição no grupo", troque a URL de envio e o JID como no
+     Resumo Diário. Vincule as credenciais do passo 4 nesses dois nodes e no
+     "Transcrever na Groq". Veja a seção "Áudios" abaixo.
    - Ative o workflow.
    - Copie a URL de produção do webhook (aparece no node "Webhook Evolution
      API" depois de ativado) e configure no seu provedor WhatsApp pra
@@ -86,6 +98,8 @@ OpenAI pro resumo de tópicos.
    - Crie uma credencial HTTP Header Auth com o header/valor de autenticação
      do seu provedor WhatsApp (pode ser a mesma do webhook, ou outra, a
      depender de como seu provedor autentica chamadas de envio).
+   - Para os áudios, crie outra credencial HTTP Header Auth com o nome
+     `Authorization` e o valor `Bearer SUA_CHAVE_DA_GROQ`.
 
 5. **Configure o workflow de Resumo Diário:**
    - Node "Ler mensagens de hoje": troque `dataTableId.value` pelo mesmo ID
@@ -100,6 +114,9 @@ OpenAI pro resumo de tópicos.
      troque `'SEU GRUPO AQUI'` pelo nome do seu grupo também.
    - Ajuste o horário no node "Todo dia às 22h" (Schedule Trigger) pro
      horário que você quiser.
+   - Node "Apagar mensagens com mais de 60 dias": troque `dataTableId.value`
+     pelo mesmo ID do passo 1. Para guardar por mais ou menos tempo, mude o
+     `60` na expressão do filtro.
    - Ative o workflow.
 
 6. **Teste antes de confiar 100%:** mande uma mensagem de teste no grupo e
@@ -264,6 +281,28 @@ O nome usado nas mensagens próprias é a constante `NOME_PROPRIO`, e não o
 `pushName`, que não chega de forma confiável em `fromMe`. Troque
 `SEU NOME AQUI` pelo nome que você quer ver aparecer no Top.
 
+## Áudios
+
+A Evolution API não manda o áudio dentro do webhook (com `webhookBase64`
+desligado, o padrão), então o workflow de Captura busca a mídia pelo id da
+mensagem, envia para a Groq (`whisper-large-v3-turbo`, em português) e grava o
+resultado como `[áudio transcrito] <texto>`. No resumo, o áudio vira assunto
+como qualquer mensagem.
+
+Em paralelo, o node "Responder transcrição no grupo" publica a transcrição
+entre aspas, citando o áudio original, com a assinatura
+`_Transcrito por resumoGrupo_`. Se não quiser essa resposta, desative o node;
+a gravação no resumo continua.
+
+A resposta só sai para áudio de até 15 minutos atrás (node "Áudio recente?").
+Se o provedor ficar horas sem entregar mensagens e depois mandar o acúmulo de
+uma vez, os áudios antigos entram no resumo, mas não viram uma sequência de
+respostas fora de hora no grupo.
+
+Se qualquer etapa falhar (chave sem crédito, limite da Groq, mídia expirada no
+provedor), aquele áudio fica de fora do resumo em silêncio. Mensagens de texto
+seguem por outro caminho e não são afetadas.
+
 ## Segurança
 
 O node "Webhook Evolution API" recebe eventos de **toda** a instância
@@ -285,6 +324,11 @@ por JID acontece depois, dentro do n8n. Por isso:
   no n8n, `saveDataSuccessExecution: "none"` faz a execução sumir **inteira**
   da lista, não só o conteúdo dela. Depois disso, a única forma de saber se a
   captura está viva é olhar as linhas gravadas na Data table.
+- As mensagens não ficam guardadas para sempre. O node "Apagar mensagens com
+  mais de 60 dias" roda junto do Resumo Diário e apaga da Data table o que
+  passou desse prazo; os resumos só precisam do dia e da semana. Ele roda em
+  paralelo e com `onError: "continueRegularOutput"`, então uma falha na
+  limpeza nunca impede o resumo de sair.
 
 ## Confiabilidade
 
@@ -334,7 +378,8 @@ renderizam no WhatsApp. Só então aponte para o grupo.
 
 ## Limitações conhecidas desta v1
 
-- Não captura mídia (áudio, imagem, vídeo) — só texto.
+- Não captura imagem, vídeo, figurinha nem documento. Texto entra direto e
+  áudio entra transcrito.
 - Um grupo por instalação (sem suporte multi-grupo nesta versão).
 - Se a chamada de IA falhar, o resumo de tópicos vira um texto de fallback
   (ver seção "Confiabilidade" acima) — não há alerta automático avisando
@@ -349,6 +394,8 @@ MIT — veja `LICENSE`.
 
 resumoGrupo reads WhatsApp group messages during the day and posts a scheduled AI-generated summary with the main topics discussed, shared links, and the most active participants. It also includes an optional weekly summary.
 
+Voice notes are transcribed and enter the summary as text. The transcription is also posted back to the group, quoting the original voice note, for people who prefer reading.
+
 Built with [n8n](https://n8n.io), an unofficial WhatsApp API provider (Evolution API by default, adaptable to WAHA and others), and Anthropic or OpenAI for topic summarization.
 
 ### Prerequisites
@@ -357,14 +404,15 @@ Built with [n8n](https://n8n.io), an unofficial WhatsApp API provider (Evolution
 - An unofficial WhatsApp API provider already connected to the number that will be in the group. Evolution API is the provider tested natively; see the WAHA section for an alternative.
 - An Anthropic or OpenAI API key.
 - Admin access to the target WhatsApp group if only admins are allowed to send messages.
+- Optional: a [Groq](https://console.groq.com) API key to transcribe voice notes (the free tier is enough for a typical group). Without it, text keeps working and only voice notes are left out.
 
 ### Installation
 
 1. **Create the Data Table.** In n8n, go to Data Tables → New Table and create `resumo_grupo_mensagens` with these columns: `remetente_nome`, `remetente_jid`, `texto`, `links`, and `timestamp`. Record the table ID.
 2. **Import the workflows.** Import `n8n-workflows/captura-workflow.json`, `n8n-workflows/resumo-diario-workflow.json`, and, optionally, `n8n-workflows/resumo-semanal-workflow.json`.
-3. **Configure Capture.** Replace the group JID placeholder, set the Data Table ID, replace the webhook path with a long random value, enable the workflow, and register its production webhook URL with your WhatsApp provider. The webhook path is the authentication boundary: treat it like a password. Do not add Header Auth to this webhook when using self-hosted Evolution API, because that deployment does not send custom webhook headers.
-4. **Configure credentials.** Add your Anthropic or OpenAI credential and the HTTP Header Auth credential required by your WhatsApp provider.
-5. **Configure Daily Summary.** Set the same Data Table ID, connect the AI credential, replace the group name and provider URL/JID placeholders, and choose the desired schedule.
+3. **Configure Capture.** Replace the group JID placeholder, set the Data Table ID, replace the webhook path with a long random value, enable the workflow, and register its production webhook URL with your WhatsApp provider. For voice notes, set `COLOQUE_A_URL_DE_BUSCA_DE_MIDIA_DO_SEU_PROVEDOR_AQUI` in `Buscar áudio na Evolution API` to `https://YOUR_SERVER/chat/getBase64FromMediaMessage/YOUR_INSTANCE`, set the send URL and group JID in `Responder transcrição no grupo`, and connect the credentials from step 4. The webhook path is the authentication boundary: treat it like a password. Do not add Header Auth to this webhook when using self-hosted Evolution API, because that deployment does not send custom webhook headers.
+4. **Configure credentials.** Add your Anthropic or OpenAI credential and the HTTP Header Auth credential required by your WhatsApp provider. For voice notes, add another HTTP Header Auth credential named `Authorization` with the value `Bearer YOUR_GROQ_KEY`.
+5. **Configure Daily Summary.** Set the same Data Table ID, connect the AI credential, replace the group name and provider URL/JID placeholders, and choose the desired schedule. Set the same Data Table ID in `Apagar mensagens com mais de 60 dias`; change the `60` in its filter to keep messages for a different period.
 6. **Test before enabling real delivery.** Send a test message, confirm it appears in the Data Table, run the daily workflow manually with the sending node disabled, review the generated text, and only then enable delivery.
 
 ### Finding the group JID
@@ -418,11 +466,23 @@ This supports both a dedicated bot number and a personal number used by someone 
 
 If you change the summary header, update the `PREFIXOS_DO_BOT` constant in `Filtrar e extrair` as well. The comparison removes asterisks before matching, and the discard rule only applies when `fromMe === true`.
 
+### Voice notes
+
+Evolution API does not include the audio in the webhook (with `webhookBase64` off, the default), so Capture fetches the media by message id, sends it to Groq (`whisper-large-v3-turbo`, Portuguese) and stores the result as `[áudio transcrito] <text>`.
+
+In parallel, `Responder transcrição no grupo` posts the transcription in quotes, quoting the original voice note, signed `_Transcrito por resumoGrupo_`. Disable that node if you do not want the reply; the summary keeps the transcription.
+
+The reply is only sent for voice notes up to 15 minutes old (`Áudio recente?`). If the provider stops delivering for hours and then sends the backlog at once, old voice notes enter the summary without flooding the group with late replies.
+
+If any step fails (no credit, Groq limit, media expired at the provider), that voice note is silently left out. Text messages follow a separate path and are not affected.
+
 ### Security
 
 The Evolution API webhook receives events from the entire connected WhatsApp instance, not only the configured group; the JID filter runs inside n8n. The Capture workflow therefore disables successful-execution data and execution progress persistence so private conversations are not stored in n8n execution history. Do not re-enable those options without understanding the privacy impact.
 
 The webhook is protected by a long random path rather than a custom header because self-hosted Evolution API does not send custom webhook headers. Disabling execution history also means the whole capture execution disappears from the n8n execution list; use the Data Table rows to confirm that capture is alive.
+
+Messages are not kept forever. `Apagar mensagens com mais de 60 dias` runs with the Daily Summary and deletes older rows from the Data Table; the summaries only need the current day and week. It runs in parallel with `onError: "continueRegularOutput"`, so a cleanup failure never blocks the summary.
 
 ### Reliability
 
@@ -445,7 +505,7 @@ The Code nodes are plain JavaScript and can be tested outside n8n with a mocked 
 
 ### Known limitations in v1
 
-- Text only; audio, images, and video are not captured.
+- Images, video, stickers, and documents are not captured. Text is stored as is and voice notes are transcribed.
 - One group per installation.
 - If the AI call fails, the topic summary uses fallback text and there is no automatic alert. Periodically confirm that normal topic paragraphs are still being generated.
 
